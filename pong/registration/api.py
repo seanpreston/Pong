@@ -1,0 +1,40 @@
+from django.conf import settings
+from django.contrib.auth.models import User
+
+from pong.api.decorators import authenticate
+from pong.api.models import AccessToken
+from pong.api.views import ApiView, ApiConsumerAuthentication
+
+
+class UserRegistrationView(ApiView):
+
+    authentication = [ApiConsumerAuthentication()]
+
+    @authenticate
+    def post(self, request, *args, **kwargs):
+
+        try:
+            data = self.deserialise(request)
+        except ValueError:
+            return self.bad_request()
+
+        user = User.objects.create(
+            first_name=data['first_name'],
+            last_name=data['last_name'],
+            email=data['email'],
+            username=data['username'],
+        )
+        user.set_password(data['password'])
+        user.save()
+
+        try:
+            access_token = user.access_tokens.get(
+                consumer__key=settings.MASTER_OAUTH_KEY,
+                consumer__secret=settings.MASTER_OAUTH_SECRET
+            )
+        except AccessToken.DoesNotExist:
+            return self.unauthorized()
+        else:
+            token = access_token.token
+
+        return self.json({'token': token})
